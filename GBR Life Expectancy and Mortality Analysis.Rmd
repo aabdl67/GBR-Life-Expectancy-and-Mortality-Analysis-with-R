@@ -1,0 +1,211 @@
+---
+title: "GBR Life Expectancy and Mortality Analysis"
+author: "Abubakar Abdallah"
+date: "2025-08-25"
+output: html_document
+description: "Leveraged R and Tidyverse to analyze UK mortality data, performing hypothesis testing and building interactive visualizations to prove a statistically significant increase in life expectancy from 1950-1984."
+---
+
+## Install and Load Required Packages
+
+```{r packages}
+## Install required packages
+install.packages(c("tidyverse", "plotly"))
+
+
+## Load libraries
+library(tidyverse)  # Includes ggplot2 and lubridate
+library(plotly)     # Interactive plots
+```
+
+## Load & Clean the Data
+
+```{r load_data}
+data <- read.csv("C:/Users/LENOVO/Documents/Data_Analytics/R/R_datasets/NEW/GBR.csv")  
+
+
+# Check structure & missing values
+names(data) 
+head(data) 
+View(data) 
+str(data) 
+summary(data) 
+sum(is.na(data))
+```
+
+## Data Cleaning
+
+```{r clean_data}
+# Convert 'Year1' and 'Year2' into a single 'Year' column | Filter for relevant columns
+data_clean <- data %>%
+    select(Year1, Year2, Sex, Age, AgeInt, m.x., q.x., l.x., d.x., L.x., T.x., e.x.) %>%
+    mutate(
+      Year = floor((Year1 + Year2)/2), 
+      Sex = ifelse(Sex == 1, "Male", "Female")  
+    ) %>%
+    select(-Year1, -Year2)
+  
+head(data_clean)
+summary(data_clean)
+
+# Clean column names
+names(data_clean) <- gsub("\\.$", "", names(data_clean)) # Removes trailing dots
+```
+
+## Exploratory Data Analysis (EDA)
+
+### 1. Life Expectancy at Birth Over Time
+
+```{r life_expectancy}
+data_clean %>%
+    filter(Age == 0) %>%
+    group_by(Year, Sex) %>%
+    summarise(Avg_Life_Expectancy = mean(e.x)) %>%
+    ggplot(aes(x = Year, y = Avg_Life_Expectancy, color = Sex)) +
+    geom_line(size = 1.5) +
+    labs(title = "Life Expectancy at Birth (1950–1984)",
+         x = "Year", y = "Life Expectancy (Years)") +
+    theme_minimal()
+```
+
+### 2. Mortality Trends by Age Group \~ Probability of death (q_x) by age group over time
+
+```{r mortality_trends}
+data_clean %>%
+  filter(Year %in% c(1950, 1960, 1970, 1980)) %>%
+  ggplot(aes(x = Age, y = q.x, color = factor(Year))) +
+  geom_line() +
+  facet_wrap(~Sex) +
+  labs(title = "Probability of Death by Age (1950–1980)",
+       x = "Age", y = "Probability of Death (q(x))") +
+  theme_minimal()
+```
+
+### 3. Mortality Rate Heatmap \~ Heatmap of death rates (m_x) by age and year
+
+```{r mortality_heatmap}
+data_clean %>%
+  ggplot(aes(x = Year, y = Age, fill = m.x)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "magma") +
+  facet_wrap(~Sex) +
+  labs(title = "Mortality Rate Heatmap by Age & Year",
+       x = "Year", y = "Age", fill = "Death Rate (m(x))") +
+  theme_minimal()
+```
+
+### 4. Population Pyramid (1950 vs. 1980)
+
+```{r population_pyramid}
+# Filter data for 1950 and 1980, Age <= 90
+pyramid_data <- data_clean %>%
+  filter(Year %in% c(1950, 1980), Age <= 90) %>%
+  mutate(l.x = ifelse(Sex == "Male", -l.x, l.x))  # Flip males for pyramid
+
+# Plot
+ggplot(pyramid_data, aes(x = Age, y = l.x, fill = Sex)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +
+  facet_wrap(~Year) +
+  labs(title = "Population Pyramid: Great Britain (1950 vs. 1980)",
+       y = "Survivors (l.x)", x = "Age") +
+  scale_y_continuous(labels = abs) +  # Remove negative signs
+  theme_minimal()
+```
+
+### 5. Survival Probability from Birth to Age 65
+
+```{r survival_probability}
+survival_prob <- data_clean %>%
+  filter(Age %in% c(0, 65)) %>%
+  select(Year, Sex, Age, l.x) %>%
+  pivot_wider(
+    names_from = Age,
+    values_from = l.x,
+    values_fn = mean  # Handle duplicates by averaging
+  ) %>%
+  mutate(Survival_Prob = `65` / `0`)  # Correct column reference
+
+ggplot(survival_prob, aes(x = Year, y = Survival_Prob, color = Sex)) +
+  geom_line(size = 1.2) +
+  labs(title = "Probability of Surviving from Birth to Age 65",
+       y = "Survival Probability") +
+  theme_minimal()
+```
+
+### 6. Infant Mortality
+
+```{r infant_mortality}
+infant_mortality <- data_clean %>%
+  filter(Age == 0) %>%
+  select(Year, Sex, q.x)
+
+ggplot(infant_mortality, aes(x = Year, y = q.x, color = Sex)) +
+  geom_line(size = 1.2) +
+  labs(title = "Infant Mortality Rate (Probability of Death in First Year)",
+       y = "Probability of Death (q(x))") +
+  theme_minimal()
+```
+
+### 7. Mortality Rate Trends: Infant vs. Elderly
+
+```{r mortality_comparison}
+mortality_comparison <- data %>%
+  filter(Age %in% c(0, 1, 70, 80)) %>%
+  mutate(
+    Age_Group = case_when(
+      Age <= 1 ~ "Infant (0-1)",
+      Age >= 70 ~ "Elderly (70+)"
+    )
+  ) %>%
+  group_by(Year1, Sex, Age_Group) %>%
+  summarise(avg_mx = mean(m.x., na.rm = TRUE))
+
+ggplot(mortality_comparison, aes(x = Year1, y = avg_mx, color = Age_Group)) +
+  geom_line(size = 1.2) +
+  facet_wrap(~Sex) +
+  labs(
+    title = "Infant vs Elderly Mortality Trends (1950-1984)",
+    x = "Year", y = "Death Rate (m(x))",
+    color = "Age Group"
+  ) +
+  theme_minimal() +
+  scale_y_log10()  # Log scale to better compare rates
+```
+
+### 8. Mortality Rate Ratios
+
+```{r mortality_ratios}
+mortality_ratios <- mortality_comparison %>%
+  pivot_wider(names_from = Age_Group, values_from = avg_mx) %>%
+  mutate(
+    Infant_Elderly_Ratio = `Infant (0-1)` / `Elderly (70+)`
+  )
+
+ggplot(mortality_ratios, aes(x = Year1, y = Infant_Elderly_Ratio, color = Sex)) +
+  geom_line(size = 1.2) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  labs(
+    title = "Ratio of Infant to Elderly Mortality Rates",
+    subtitle = "Values >1 mean infant mortality exceeds elderly mortality",
+    x = "Year", y = "Infant/Elderly Mortality Ratio"
+  ) +
+  theme_minimal()
+```
+
+### Hypothesis Testing: Did Life Expectancy Improve? \| A 1950s vs. 1980s Comparison
+
+```{r t_test}
+life_exp_1950s <- data_clean %>% filter(Year <= 1960, Age == 0) %>% pull(e.x)
+life_exp_1980s <- data_clean %>% filter(Year >= 1980, Age == 0) %>% pull(e.x)
+
+t.test(life_exp_1980s, life_exp_1950s, alternative = "greater")
+```
+
+#### Perform an independent two-sample t-test
+
+**H₀ (Null Hypothesis)**: Mean life expectancy in the 1980s \<= Mean life expectancy in the 1950s
+
+**H₁ (Alternative Hypothesis)**: Mean life expectancy in the 1980s \> Mean life expectancy in the 1950s
+
+**CONCLUSION**: Since p-value(2.2e-16) \< alpha(0.05), we reject the H₀, and conclude that life expectancy significantly increased.
