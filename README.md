@@ -1,5 +1,5 @@
 
-# GBR Life Expectancy Analysis
+# GBR Life Expectancy and Mortality Analysis
 
 ## Project Overview
 
@@ -90,7 +90,7 @@ Specific dataset: Period life tables for Great Britain
 - `T(x)`: Total person-years lived above exact age x
 - `e(x)`: Life expectancy at exact age x (average number of years remaining to live)
 
-# Required R Packages
+## Required R Packages
 
 - tidyverse (dplyr, ggplot2, tidyr, readr)
 
